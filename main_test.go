@@ -5,14 +5,13 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/signal"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
 	dp "github.com/pavelkrolevets/DutyProcessor"
+	"gotest.tools/assert"
 )
 
 var upgrader = websocket.Upgrader{}
@@ -36,9 +35,6 @@ func echo(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestWorker(t *testing.T) {
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-	
     // Create test server with the echo handler.
     s := httptest.NewServer(http.HandlerFunc(echo))
     defer s.Close()
@@ -66,12 +62,28 @@ func TestWorker(t *testing.T) {
 		}
 		msgs = append(msgs, m)
 	}
-	dp.Worker(ws, interrupt)
     // Send message to server, read response and check to see if it's what we expect.
     for _, msg := range(msgs) {
-		time.Sleep(time.Second * 1)
+		time.Sleep(time.Second * 5)
         if err := ws.WriteMessage(websocket.TextMessage, msg); err != nil {
             t.Fatalf("%v", err)
         }
-    }	
+    }
+	dp.Worker(ws)
+}
+
+func TestProposerProcessor(t *testing.T) {
+
+	proposerDuties := make(chan dp.Duty)
+
+	var testDuty dp.Duty
+	testDuty.Duty = "PROPOSER"
+	testDuty.Height = 1
+	testDuty.Validator = "1"
+
+	go dp.ProposerProcessor(testDuty, proposerDuties)
+	defer close(proposerDuties)
+	d := <-proposerDuties
+	assert.Equal(t, testDuty, d)
+
 }

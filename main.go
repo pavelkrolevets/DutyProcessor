@@ -21,9 +21,6 @@ type Duty struct {
 }
 
 func main() {
-	// interrupt channel needed to send a kill signal coming form the OS
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
 	// utilize Gorilla websocket client to connect to API
 	u := url.URL{Scheme: "ws", Host: "127.0.0.1:5000", Path: "/ws"}
 	log.Printf("connecting to %s", u.String())
@@ -36,10 +33,14 @@ func main() {
 	// close the connection in case of error
 	defer c.Close()
 	// run main routine
-	Worker(c, interrupt)
+	Worker(c)
 }
 
-func Worker(c *websocket.Conn, interrupt chan os.Signal) {
+func Worker(c *websocket.Conn) {
+	// interrupt channel needed to send a kill signal coming form the OS
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+
 	// utilize done channel to close the connection in case of irrecoverable error at client
 	done := make(chan struct{})
 
@@ -51,7 +52,7 @@ func Worker(c *websocket.Conn, interrupt chan os.Signal) {
 	aggregtorDuties := make(chan Duty)
 	attesterDuties := make(chan Duty)
 	commiteeDuties := make(chan Duty)
-	
+
 	// Process incoming ws messages
 	go ListenAndProcess(done, c, duties)
 
@@ -70,25 +71,25 @@ func Worker(c *websocket.Conn, interrupt chan os.Signal) {
 			if duty.Duty == "PROPOSER" {
 				go func() {
 					defer wg.Done()
-					proposerProcessor(duty, proposerDuties)
+					ProposerProcessor(duty, proposerDuties)
 				}()
 			}
 			if duty.Duty == "ATTESTER" {
 				go func() {
 					defer wg.Done()
-					attesterProcessor(duty, attesterDuties)
+					AttesterProcessor(duty, attesterDuties)
 				}()
 			}
 			if duty.Duty == "AGGREGATOR" {
 				go func() {
 					defer wg.Done()
-					aggregatorProcessor(duty, aggregtorDuties)
+					AggregatorProcessor(duty, aggregtorDuties)
 				}()
 			}
 			if duty.Duty == "SYNC_COMMITTEE" {
 				go func() {
 					defer wg.Done()
-					committeeProcessor(duty, commiteeDuties)
+					CommitteeProcessor(duty, commiteeDuties)
 				}()
 			}
 		case <-done:
@@ -126,28 +127,28 @@ func ListenAndProcess(done chan struct{}, c *websocket.Conn, d chan Duty) {
 }
 
 // functions for duties processing
-func proposerProcessor(m Duty, processedDuties chan Duty) {
+func ProposerProcessor(m Duty, processedDuties chan Duty) {
 	n := 1 + rand.Int31n(20-1+1)
 	time.Sleep(time.Second * time.Duration(n))
 	log.Printf("Duty PROPOSER processed: %v", m)
 	processedDuties <- m
 }
 
-func attesterProcessor(m Duty, processedDuties chan Duty) {
+func AttesterProcessor(m Duty, processedDuties chan Duty) {
 	n := 1 + rand.Int31n(20-1+1)
 	time.Sleep(time.Second * time.Duration(n))
 	log.Printf("Duty ATTESTER processed: %v", m)
 	processedDuties <- m
 }
 
-func aggregatorProcessor(m Duty, processedDuties chan Duty) {
+func AggregatorProcessor(m Duty, processedDuties chan Duty) {
 	n := 1 + rand.Int31n(20-1+1)
 	time.Sleep(time.Second * time.Duration(n))
 	log.Printf("Duty AGGREGATOR processed: %v", m)
 	processedDuties <- m
 }
 
-func committeeProcessor(m Duty, processedDuties chan Duty) {
+func CommitteeProcessor(m Duty, processedDuties chan Duty) {
 	n := 1 + rand.Int31n(20-1+1)
 	time.Sleep(time.Second * time.Duration(n))
 	log.Printf("Duty SYNC_COMMITTEE processed: %v", m)
