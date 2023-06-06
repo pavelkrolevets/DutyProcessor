@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// struct to unmarshall incoming messages
 type Duty struct {
 	Validator string `json:"validator"`
 	Duty      string `json:"duty"`
@@ -34,19 +35,33 @@ func main() {
 	}
 	// close the connection in case of error
 	defer c.Close()
+	// run main routine
+	Worker(c, interrupt)
+}
 
+func Worker(c *websocket.Conn, interrupt chan os.Signal) {
 	// utilize done channel to close the connection in case of irrecoverable error at client
 	done := make(chan struct{})
 
 	// create a channel to recieve processed messages from ws
 	duties := make(chan Duty)
 
+	// channels of processed messages for validators
+	proposerDuties := make(chan Duty)
+	aggregtorDuties := make(chan Duty)
+	attesterDuties := make(chan Duty)
+	commiteeDuties := make(chan Duty)
+	
 	// Process incoming ws messages
-	go listenAndProcess(done, c, duties)
+	go ListenAndProcess(done, c, duties)
 
-	// sync group to process each message in parrallel
+	// run execution in parallel
+	go Proposer(proposerDuties)
+	go Aggregator(aggregtorDuties)
+	go Attester(attesterDuties)
+	go Committee(commiteeDuties)
+
 	var wg sync.WaitGroup
-	wg.Wait()
 	for {
 		select {
 		case duty := <-duties:
@@ -55,26 +70,25 @@ func main() {
 			if duty.Duty == "PROPOSER" {
 				go func() {
 					defer wg.Done()
-					proposerProcessor(duty)
+					proposerProcessor(duty, proposerDuties)
 				}()
-
 			}
 			if duty.Duty == "ATTESTER" {
 				go func() {
 					defer wg.Done()
-					attesterProcessor(duty)
+					attesterProcessor(duty, attesterDuties)
 				}()
 			}
 			if duty.Duty == "AGGREGATOR" {
 				go func() {
 					defer wg.Done()
-					aggregatorProcessor(duty)
+					aggregatorProcessor(duty, aggregtorDuties)
 				}()
 			}
 			if duty.Duty == "SYNC_COMMITTEE" {
 				go func() {
 					defer wg.Done()
-					committeeProcessor(duty)
+					committeeProcessor(duty, commiteeDuties)
 				}()
 			}
 		case <-done:
@@ -91,9 +105,10 @@ func main() {
 	}
 }
 
-func listenAndProcess(done chan struct{}, c *websocket.Conn, d chan Duty) {
+func ListenAndProcess(done chan struct{}, c *websocket.Conn, d chan Duty) {
 	defer close(done)
 	for {
+		// read message from ws
 		_, message, err := c.ReadMessage()
 		if err != nil {
 			log.Println("read:", err)
@@ -105,30 +120,81 @@ func listenAndProcess(done chan struct{}, c *websocket.Conn, d chan Duty) {
 			log.Fatal("Cant unmarshall message:", err)
 		}
 		log.Printf("Message received: %v", duty)
+		// send message to channel for processing
 		d <- duty
 	}
 }
 
-func proposerProcessor(m Duty) {
+// functions for duties processing
+func proposerProcessor(m Duty, processedDuties chan Duty) {
 	n := 1 + rand.Int31n(20-1+1)
 	time.Sleep(time.Second * time.Duration(n))
 	log.Printf("Duty PROPOSER processed: %v", m)
+	processedDuties <- m
 }
 
-func attesterProcessor(m Duty) {
+func attesterProcessor(m Duty, processedDuties chan Duty) {
 	n := 1 + rand.Int31n(20-1+1)
 	time.Sleep(time.Second * time.Duration(n))
 	log.Printf("Duty ATTESTER processed: %v", m)
+	processedDuties <- m
 }
 
-func aggregatorProcessor(m Duty) {
+func aggregatorProcessor(m Duty, processedDuties chan Duty) {
 	n := 1 + rand.Int31n(20-1+1)
 	time.Sleep(time.Second * time.Duration(n))
 	log.Printf("Duty AGGREGATOR processed: %v", m)
+	processedDuties <- m
 }
 
-func committeeProcessor(m Duty) {
+func committeeProcessor(m Duty, processedDuties chan Duty) {
 	n := 1 + rand.Int31n(20-1+1)
 	time.Sleep(time.Second * time.Duration(n))
 	log.Printf("Duty SYNC_COMMITTEE processed: %v", m)
+	processedDuties <- m
+}
+
+// main execution routines
+func Proposer(d chan Duty) {
+	for {
+		select {
+		case duty := <-d:
+			n := 1 + rand.Int31n(20-1+1)
+			time.Sleep(time.Second * time.Duration(n))
+			log.Printf("Duty PROPOSER executed: %v", duty)
+		}
+	}
+}
+
+func Attester(d chan Duty) {
+	for {
+		select {
+		case duty := <-d:
+			n := 1 + rand.Int31n(20-1+1)
+			time.Sleep(time.Second * time.Duration(n))
+			log.Printf("Duty ATTESTER executed: %v", duty)
+		}
+	}
+}
+
+func Aggregator(d chan Duty) {
+	for {
+		select {
+		case duty := <-d:
+			n := 1 + rand.Int31n(20-1+1)
+			time.Sleep(time.Second * time.Duration(n))
+			log.Printf("Duty AGGREGATOR executed: %v", duty)
+		}
+	}
+}
+
+func Committee(d chan Duty) {
+	for {
+		select {
+		case duty := <-d:
+			n := 1 + rand.Int31n(20-1+1)
+			time.Sleep(time.Second * time.Duration(n))
+			log.Printf("Duty SYNC_COMMITTEE executed: %v", duty)
+		}
+	}
 }
